@@ -64,6 +64,16 @@ async function createPtyTerminal(options: TerminalOptions): Promise<TerminalWrap
   let lastOutputTime = Date.now();
 
   ptyProcess.onData((data: string) => {
+    // Respond to cursor position queries (DSR - Device Status Report, \x1b[6n).
+    // IRB and other interactive programs send this to determine where to draw the
+    // prompt. xterm-headless doesn't respond automatically, so we do it here.
+    // Strip the DSR sequence before passing to xterm to prevent rendering artifacts.
+    if (data.includes('\x1b[6n')) {
+      const row = xterm.buffer.active.baseY + xterm.buffer.active.cursorY + 1;
+      const col = xterm.buffer.active.cursorX + 1;
+      ptyProcess.write(`\x1b[${row};${col}R`);
+      data = data.replaceAll('\x1b[6n', '');
+    }
     xterm.write(data);
     outputBuffer += data;
     lastOutputTime = Date.now();
